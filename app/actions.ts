@@ -42,25 +42,27 @@ export const signUpAction = async (formData: FormData) => {
   }
 };
 
-export async function signInAction(formData: FormData) {
-  const email = formData.get('email') as string
-  const password = formData.get('password') as string
+export async function signInAction(email: string, password: string) {
+  const cookieStore = cookies()
+  const supabase = createServerActionClient({ 
+    cookies: () => cookieStore 
+  })
 
-  const supabase = createServerActionClient({ cookies })
-
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   })
 
   if (error) {
-    return {
-      error: error.message
-    }
+    return { error: error.message }
   }
 
-  // Redirect after successful sign in
-  redirect('/app/engage')
+  if (data?.user) {
+    revalidatePath('/app/engage')
+    redirect('/app/engage')
+  }
+
+  return { error: 'Something went wrong' }
 }
 
 export const forgotPasswordAction = async (formData: FormData) => {
@@ -135,8 +137,13 @@ export const resetPasswordAction = async (formData: FormData) => {
 };
 
 export async function signOutAction() {
-  const supabase = createServerActionClient({ cookies })
+  const cookieStore = cookies()
+  const supabase = createServerActionClient({ 
+    cookies: () => cookieStore 
+  })
+  
   await supabase.auth.signOut()
+  revalidatePath('/')
   redirect('/sign-in')
 }
 
@@ -211,7 +218,10 @@ export async function createWorkspaceAction(formData: FormData) {
 }
 
 export async function selectWorkspaceAction(workspaceId: string) {
-  const supabase = createServerActionClient({ cookies })
+  const cookieStore = cookies()
+  const supabase = createServerActionClient({ 
+    cookies: () => cookieStore 
+  })
 
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) {

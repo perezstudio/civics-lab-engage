@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useTheme } from 'next-themes'
@@ -21,12 +21,20 @@ import {
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { selectWorkspaceAction, signOutAction } from '@/app/actions'
+import { supabase } from '@/lib/supabase/client'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 const menuItems = [
   { name: 'Contacts', icon: Users, href: '/app/contacts' },
   { name: 'Businesses', icon: Building2, href: '/app/businesses' },
   { name: 'Donations', icon: PiggyBank, href: '/app/donations' },
 ]
+
+interface RecordType {
+  id: string
+  name: string
+  slug: string
+}
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
   workspaces?: Array<{
@@ -37,6 +45,8 @@ interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
     id: string
     name: string
   }
+  recordTypes?: RecordType[]
+  selectedRecordType?: RecordType
   user?: {
     email: string
     name?: string
@@ -46,13 +56,25 @@ interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
 export function Sidebar({ 
   className, 
   workspaces = [], 
-  currentWorkspace, 
+  currentWorkspace,
+  recordTypes = [],
+  selectedRecordType,
   user,
 }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  const router = useRouter()
+  const supabase = createClientComponentClient()
+  
+  console.log('Sidebar Props:', {
+    workspaces,
+    currentWorkspace,
+    recordTypes,
+    selectedRecordType,
+    user
+  })
 
   useEffect(() => {
     setMounted(true)
@@ -60,6 +82,26 @@ export function Sidebar({
 
   const handleWorkspaceSelect = async (workspaceId: string) => {
     await selectWorkspaceAction(workspaceId)
+  }
+
+  const handleRecordTypeSelect = async (recordTypeId: string) => {
+    const { error } = await supabase
+      .from('user_settings')
+      .upsert({
+        user_id: user?.id,
+        selected_record_type_id: recordTypeId,
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error updating record type:', error)
+      return
+    }
+
+    // Refresh the page to show the new record type
+    router.refresh()
   }
 
   return (
@@ -113,22 +155,22 @@ export function Sidebar({
       <div className="flex-1 overflow-auto">
         <div className="px-3 py-2">
           <div className="space-y-1">
-            {menuItems.map((item) => (
-              <Link key={item.href} href={item.href}>
-                <Button
-                  variant={pathname.startsWith(item.href) ? "secondary" : "ghost"}
-                  className={cn(
-                    "w-full justify-start",
-                    collapsed && "justify-center px-2"
-                  )}
-                >
-                  <item.icon className={cn(
-                    "h-4 w-4",
-                    collapsed ? "mr-0" : "mr-2"
-                  )} />
-                  {!collapsed && <span>{item.name}</span>}
-                </Button>
-              </Link>
+            {recordTypes.map((recordType) => (
+              <Button
+                key={recordType.id}
+                variant={selectedRecordType?.id === recordType.id ? "secondary" : "ghost"}
+                className={cn(
+                  "w-full justify-start",
+                  collapsed && "justify-center px-2"
+                )}
+                onClick={() => handleRecordTypeSelect(recordType.id)}
+              >
+                <RecordTypeIcon type={recordType.slug} className={cn(
+                  "h-4 w-4",
+                  collapsed ? "mr-0" : "mr-2"
+                )} />
+                {!collapsed && <span>{recordType.name}</span>}
+              </Button>
             ))}
           </div>
         </div>
@@ -182,4 +224,17 @@ export function Sidebar({
       </div>
     </div>
   )
+}
+
+function RecordTypeIcon({ type, className }: { type: string, className?: string }) {
+  switch (type) {
+    case 'contacts':
+      return <Users className={className} />
+    case 'businesses':
+      return <Building2 className={className} />
+    case 'donations':
+      return <PiggyBank className={className} />
+    default:
+      return null
+  }
 } 

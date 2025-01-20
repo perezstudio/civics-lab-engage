@@ -10,26 +10,18 @@ export async function middleware(req: NextRequest) {
     data: { session },
   } = await supabase.auth.getSession()
 
-  // If no session and trying to access protected routes
-  if (!session) {
-    if (req.nextUrl.pathname.startsWith('/app') || 
-        req.nextUrl.pathname === '/workspace-setup') {
-      return NextResponse.redirect(new URL('/sign-in', req.url))
-    }
+  // If user is not signed in and the current path is not /sign-in,
+  // redirect the user to /sign-in
+  if (!session && req.nextUrl.pathname !== '/sign-in') {
+    const redirectUrl = new URL('/sign-in', req.url)
+    return NextResponse.redirect(redirectUrl)
   }
 
-  // If session exists but no workspace, redirect to workspace setup
-  // (except if already on workspace-setup)
-  if (session && req.nextUrl.pathname.startsWith('/app')) {
-    const { data: userSettings } = await supabase
-      .from('user_settings')
-      .select('selected_workspace_id')
-      .single()
-
-    if (!userSettings?.selected_workspace_id && 
-        req.nextUrl.pathname !== '/workspace-setup') {
-      return NextResponse.redirect(new URL('/workspace-setup', req.url))
-    }
+  // If user is signed in and the current path is /sign-in,
+  // redirect the user to /app/engage
+  if (session && req.nextUrl.pathname === '/sign-in') {
+    const redirectUrl = new URL('/app/engage', req.url)
+    return NextResponse.redirect(redirectUrl)
   }
 
   return res
@@ -38,12 +30,12 @@ export async function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all request paths except:
+     * Match all request paths except for the ones starting with:
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public folder
+     * - public (public files)
      */
-    '/((?!_next/static|_next/image|favicon.ico|public/).*)',
+    '/((?!_next/static|_next/image|favicon.ico|public).*)',
   ],
 }
