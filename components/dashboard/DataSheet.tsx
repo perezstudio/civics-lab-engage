@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { DataGrid } from './DataGrid'
 import { FilterBar } from './FilterBar'
 
@@ -19,36 +19,85 @@ interface DataSheetProps {
   onDelete?: (row: any) => void
 }
 
-export function DataSheet({ columns, data, onRowClick, onEdit, onDelete }: DataSheetProps) {
-  const [filters, setFilters] = useState<any[]>([])
+export function DataSheet({
+  columns,
+  data,
+  onRowClick,
+  onEdit,
+  onDelete,
+}: DataSheetProps) {
+  const [filteredData, setFilteredData] = useState(data)
 
-  const handleFiltersChange = (newFilters: any[]) => {
-    setFilters(newFilters)
-  }
+  const handleFiltersChange = useCallback((filters: any[]) => {
+    // If there are no filters, show all data
+    if (!filters || filters.length === 0) {
+      setFilteredData(data)
+      return
+    }
 
-  // Apply filters to data
-  const filteredData = data.filter(row => {
-    if (filters.length === 0) return true
-    return filters.every(filter => {
-      const value = row[filter.field]
-      if (value == null) return false
-      
-      switch (filter.operator) {
-        case 'contains':
-          return String(value).toLowerCase().includes(String(filter.value).toLowerCase())
-        case 'equals':
-          return String(value) === String(filter.value)
-        case 'startsWith':
-          return String(value).toLowerCase().startsWith(String(filter.value).toLowerCase())
-        case 'endsWith':
-          return String(value).toLowerCase().endsWith(String(filter.value).toLowerCase())
-        default:
+    const filtered = data.filter(row => {
+      return filters.every(filter => {
+        // Skip empty filters
+        if (!filter.field || (!filter.value && !['isEmpty', 'isNotEmpty'].includes(filter.operator))) {
           return true
-      }
-    })
-  })
+        }
 
-  console.log('DataSheet received:', { columns, data, filteredData })
+        const getValue = (obj: any, field: string) => {
+          if (['first_name', 'middle_name', 'last_name', 'race', 'gender', 'pronouns'].includes(field)) {
+            return obj.contact_records?.[field]
+          }
+          if (field === 'phone_numbers') {
+            return (obj.record_phones || [])
+              .filter((p: any) => p.is_primary)
+              .map((p: any) => p.phone)
+              .join(', ')
+          }
+          if (field === 'emails') {
+            return (obj.record_emails || [])
+              .filter((e: any) => e.is_primary)
+              .map((e: any) => e.email)
+              .join(', ')
+          }
+          return obj[field]
+        }
+
+        const value = getValue(row, filter.field)
+        if (value === null || value === undefined) {
+          // For isEmpty/isNotEmpty operators, null/undefined should be treated as empty
+          if (filter.operator === 'isEmpty') return true
+          if (filter.operator === 'isNotEmpty') return false
+          return false
+        }
+
+        const stringValue = String(value).toLowerCase()
+        const filterValue = filter.value?.toLowerCase() || ''
+
+        switch (filter.operator) {
+          case 'contains':
+            return stringValue.includes(filterValue)
+          case 'equals':
+            return stringValue === filterValue
+          case 'startsWith':
+            return stringValue.startsWith(filterValue)
+          case 'endsWith':
+            return stringValue.endsWith(filterValue)
+          case 'isEmpty':
+            return !stringValue
+          case 'isNotEmpty':
+            return !!stringValue
+          default:
+            return true
+        }
+      })
+    })
+
+    setFilteredData(filtered)
+  }, [data])
+
+  // Update filteredData when data changes
+  useEffect(() => {
+    setFilteredData(data)
+  }, [data])
 
   return (
     <div className="flex flex-col gap-4">
