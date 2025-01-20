@@ -69,7 +69,6 @@ export function DataView({ workspace, recordType }: DataViewProps) {
           created_at,
           updated_at,
           contact_records!inner (
-            record_id,
             first_name,
             middle_name,
             last_name,
@@ -114,8 +113,7 @@ export function DataView({ workspace, recordType }: DataViewProps) {
         return;
       }
 
-      const transformedRecords = transformRecords(records || []);
-      setRecords(transformedRecords);
+      setRecords(records || []);
     }
 
     fetchRecords();
@@ -188,34 +186,34 @@ export function DataView({ workspace, recordType }: DataViewProps) {
         header: field.name,
         sortable: true,
         render: (rowData: any) => {
+          console.log('Rendering field:', field.key, 'with data:', rowData);
           // Add null check for rowData
           if (!rowData) return '';
 
           // Handle contact record fields
           if (['first_name', 'middle_name', 'last_name', 'race', 'gender', 'pronouns'].includes(field.key)) {
-            // Safely access contact_records with optional chaining
-            return rowData?.contact_records?.[field.key] || '';
+            return rowData.contact_records?.[field.key] || '';
           }
 
           // Handle phone numbers
           if (field.key === 'phone_numbers') {
             return (rowData.record_phones || [])
-              .filter((p: any) => p?.is_primary)
-              .map((p: any) => p?.phone)
+              .filter((p: any) => p.is_primary)
+              .map((p: any) => p.phone)
               .join(', ') || '';
           }
 
           // Handle emails
           if (field.key === 'emails') {
             return (rowData.record_emails || [])
-              .filter((e: any) => e?.is_primary)
-              .map((e: any) => e?.email)
+              .filter((e: any) => e.is_primary)
+              .map((e: any) => e.email)
               .join(', ') || '';
           }
 
           // Handle addresses
           if (field.key === 'addresses') {
-            const primaryAddress = (rowData.record_addresses || []).find((a: any) => a?.is_primary);
+            const primaryAddress = (rowData.record_addresses || []).find((a: any) => a.is_primary);
             if (primaryAddress) {
               return `${primaryAddress.street_1}${primaryAddress.street_2 ? `, ${primaryAddress.street_2}` : ''}, ${primaryAddress.city}, ${primaryAddress.state} ${primaryAddress.postal_code}`;
             }
@@ -225,7 +223,7 @@ export function DataView({ workspace, recordType }: DataViewProps) {
           // Handle social media
           if (field.key === 'social_media') {
             return (rowData.record_social_media || [])
-              .map((s: any) => `${s?.platform}: ${s?.username}`)
+              .map((s: any) => `${s.platform}: ${s.username}`)
               .join(', ') || '';
           }
 
@@ -234,19 +232,8 @@ export function DataView({ workspace, recordType }: DataViewProps) {
         }
       }));
 
+    console.log('Updated columns:', newColumns);
     setColumns(newColumns);
-  };
-
-  // Transform raw record data into the format we need
-  const transformRecords = (rawRecords: any[]) => {
-    return rawRecords.map(record => ({
-      ...record,
-      contact_records: record.contact_records || {},
-      record_emails: record.record_emails || [],
-      record_phones: record.record_phones || [],
-      record_addresses: record.record_addresses || [],
-      record_social_media: record.record_social_media || []
-    }));
   };
 
   // Handle view changes

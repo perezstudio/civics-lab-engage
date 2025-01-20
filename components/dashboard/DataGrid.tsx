@@ -63,9 +63,30 @@ export function DataGrid({
 
   const sortedData = [...data].sort((a, b) => {
     if (!sortField || !sortDirection) return 0
-    const aValue = a[sortField]
-    const bValue = b[sortField]
-    if (aValue === bValue) return 0
+    
+    // Get values considering nested structure
+    const getValue = (obj: any, field: string) => {
+      if (['first_name', 'middle_name', 'last_name', 'race', 'gender', 'pronouns'].includes(field)) {
+        return obj.contact_records?.[field]
+      }
+      if (field === 'phone_numbers') {
+        return (obj.record_phones || [])
+          .filter((p: any) => p.is_primary)
+          .map((p: any) => p.phone)
+          .join(', ')
+      }
+      if (field === 'emails') {
+        return (obj.record_emails || [])
+          .filter((e: any) => e.is_primary)
+          .map((e: any) => e.email)
+          .join(', ')
+      }
+      return obj[field]
+    }
+
+    const aValue = getValue(a, sortField) || ''
+    const bValue = getValue(b, sortField) || ''
+    
     if (sortDirection === 'asc') {
       return aValue < bValue ? -1 : 1
     } else {
@@ -102,15 +123,13 @@ export function DataGrid({
         <TableBody>
           {sortedData.map((row, index) => (
             <TableRow
-              key={index}
+              key={row.id || index}
               className={onRowClick ? 'cursor-pointer' : ''}
               onClick={() => onRowClick?.(row)}
             >
               {columns.map((column) => (
                 <TableCell key={column.field}>
-                  {column.render
-                    ? column.render(row[column.field])
-                    : row[column.field]}
+                  {column.render ? column.render(row) : row[column.field]}
                 </TableCell>
               ))}
               <TableCell>
