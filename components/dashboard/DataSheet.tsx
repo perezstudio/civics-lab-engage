@@ -56,13 +56,15 @@ export function DataSheet({ columns, data, onRowClick, onEdit, onDelete }: DataS
         columns={columns} 
         onFiltersChange={handleFiltersChange} 
       />
-      <DataGrid
-        columns={columns}
-        data={filteredData}
-        onRowClick={onRowClick}
-        onEdit={onEdit}
-        onDelete={onDelete}
-      />
+      <div className="flex-1 overflow-auto">
+        <DataGrid
+          columns={columns}
+          data={filteredData}
+          onRowClick={onRowClick}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />
+      </div>
     </div>
   )
 } 

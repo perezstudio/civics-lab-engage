@@ -83,3 +83,47 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Add these styles for the resizable columns */
+.cursor-col-resize {
+  cursor: col-resize !important;
+  touch-action: none;
+}
+
+/* Prevent text selection while resizing */
+.select-none {
+  user-select: none;
+}
+
+/* Make table cells behave properly with custom widths */
+td, th {
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+}
+
+/* Ensure the resize handle is above other content */
+.resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: col-resize;
+  z-index: 1;
+}
+
+/* Add styles for the table container */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  position: relative;
+}
+
+/* Ensure table takes full width */
+table {
+  width: 100%;
+  table-layout: fixed;
+}
