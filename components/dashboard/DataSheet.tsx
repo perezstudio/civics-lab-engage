@@ -19,50 +19,39 @@ interface DataSheetProps {
   onDelete?: (row: any) => void
 }
 
-export function DataSheet({
-  columns,
-  data,
-  onRowClick,
-  onEdit,
-  onDelete,
-}: DataSheetProps) {
-  const [filteredData, setFilteredData] = useState(data)
+export function DataSheet({ columns, data, onRowClick, onEdit, onDelete }: DataSheetProps) {
+  const [filters, setFilters] = useState<any[]>([])
 
-  const handleFiltersChange = (filters: any[]) => {
-    if (filters.length === 0) {
-      setFilteredData(data)
-      return
-    }
-
-    const filtered = data.filter(item => {
-      return filters.every(filter => {
-        const value = item[filter.field]
-        const filterValue = filter.value.toLowerCase()
-
-        switch (filter.operator) {
-          case 'equals':
-            return value?.toLowerCase() === filterValue
-          case 'contains':
-            return value?.toLowerCase().includes(filterValue)
-          case 'startsWith':
-            return value?.toLowerCase().startsWith(filterValue)
-          case 'endsWith':
-            return value?.toLowerCase().endsWith(filterValue)
-          case 'isEmpty':
-            return !value || value.length === 0
-          case 'isNotEmpty':
-            return value && value.length > 0
-          default:
-            return true
-        }
-      })
-    })
-
-    setFilteredData(filtered)
+  const handleFiltersChange = (newFilters: any[]) => {
+    setFilters(newFilters)
   }
 
+  // Apply filters to data
+  const filteredData = data.filter(row => {
+    if (filters.length === 0) return true
+    return filters.every(filter => {
+      const value = row[filter.field]
+      if (value == null) return false
+      
+      switch (filter.operator) {
+        case 'contains':
+          return String(value).toLowerCase().includes(String(filter.value).toLowerCase())
+        case 'equals':
+          return String(value) === String(filter.value)
+        case 'startsWith':
+          return String(value).toLowerCase().startsWith(String(filter.value).toLowerCase())
+        case 'endsWith':
+          return String(value).toLowerCase().endsWith(String(filter.value).toLowerCase())
+        default:
+          return true
+      }
+    })
+  })
+
+  console.log('DataSheet received:', { columns, data, filteredData })
+
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <FilterBar 
         columns={columns} 
         onFiltersChange={handleFiltersChange} 
