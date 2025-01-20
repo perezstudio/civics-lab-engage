@@ -39,6 +39,7 @@ interface FieldDefinition {
 
 interface DataHeaderProps {
   title?: string;
+  subtitle?: string;
   recordType?: string;
   workspaceId?: string;
   fields?: any[];
@@ -51,39 +52,44 @@ interface DataHeaderProps {
 
 export function DataHeader({ 
   title = '',
+  subtitle,
   recordType = '',
   workspaceId = '',
   fields = [],
-  ...props 
+  views = [],
+  selectedView,
+  onViewChange,
+  onViewCreated,
+  onViewSettingsChange,
 }: DataHeaderProps) {
   const [createViewOpen, setCreateViewOpen] = useState(false)
   const [createRecordOpen, setCreateRecordOpen] = useState(false)
 
   const handleFieldVisibilityChange = (fieldKey: string, checked: boolean) => {
-    if (!props.selectedView?.settings?.visible_fields) return;
+    if (!selectedView?.settings?.visible_fields) return;
 
     const newVisibleFields = checked
-      ? [...props.selectedView.settings.visible_fields, fieldKey]
-      : props.selectedView.settings.visible_fields.filter(f => f !== fieldKey);
+      ? [...selectedView.settings.visible_fields, fieldKey]
+      : selectedView.settings.visible_fields.filter(f => f !== fieldKey);
 
-    props.onViewSettingsChange?.({
-      ...props.selectedView.settings,
+    onViewSettingsChange?.({
+      ...selectedView.settings,
       visible_fields: newVisibleFields
     });
   }
 
   // Debug logging
   console.log('DataHeader props:', { 
-    views: props.views, 
-    selectedView: props.selectedView,
-    visibleFields: props.selectedView?.settings?.visible_fields 
+    views, 
+    selectedView,
+    visibleFields: selectedView?.settings?.visible_fields 
   });
   
   return (
     <div className="flex items-center justify-between p-4 border-b">
       <div>
         <h1 className="text-2xl font-bold">{title}</h1>
-        <p className="text-sm text-muted-foreground">{props.subtitle}</p>
+        {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
       </div>
       
       <div className="flex items-center gap-2">
@@ -95,25 +101,22 @@ export function DataHeader({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline">
-              {props.selectedView?.name || 'Default View'}
+              {selectedView?.name || 'Default View'}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <select 
-              value={props.selectedView?.id || ''}
-              onChange={(e) => {
-                const view = props.views?.find(v => v.id === e.target.value);
-                if (view && props.onViewChange) {
-                  props.onViewChange(view);
-                }
-              }}
-              className="border rounded px-2 py-1"
-            >
-              <option value="">Select a view...</option>
-            </select>
+          <DropdownMenuContent align="end" className="w-[200px]">
+            {views.map((view) => (
+              <DropdownMenuItem
+                key={view.id}
+                onSelect={() => onViewChange?.(view)}
+              >
+                {view.name}
+              </DropdownMenuItem>
+            ))}
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => setCreateViewOpen(true)}>
-              Create New View...
+              <Plus className="mr-2 h-4 w-4" />
+              Create New View
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -132,7 +135,7 @@ export function DataHeader({
                   <div key={field.key} className="flex items-center space-x-2">
                     <Checkbox
                       id={field.key}
-                      checked={props.selectedView?.settings?.visible_fields?.includes(field.key) ?? false}
+                      checked={selectedView?.settings?.visible_fields?.includes(field.key) ?? false}
                       onCheckedChange={(checked) => 
                         handleFieldVisibilityChange(field.key, checked as boolean)
                       }
@@ -156,7 +159,10 @@ export function DataHeader({
           workspaceId={workspaceId}
           recordType={recordType}
           fields={fields}
-          onViewCreated={props.onViewCreated}
+          onViewCreated={(view) => {
+            onViewCreated?.(view);
+            setCreateViewOpen(false);
+          }}
         />
 
         <CreateRecordSheet

@@ -54,18 +54,14 @@ export function DataView({ workspace, recordType }: DataViewProps) {
   const [selectedView, setSelectedView] = useState<View | null>(null)
   const [fields, setFields] = useState<FieldDefinition[]>([])
   const [records, setRecords] = useState<any[]>([])
+  const [columns, setColumns] = useState<any[]>([])
   const supabase = createClientComponentClient()
   
   // Fetch records for the current record type
   useEffect(() => {
     async function fetchRecords() {
-      console.log('Fetching records for:', {
-        workspaceId: workspace.id,
-        recordTypeId: recordType.id,
-        recordTypeSlug: recordType.slug
-      })
+      if (!workspace.id || !recordType.id) return;
 
-      // Start with the records table and join all related data
       const { data: records, error } = await supabase
         .from('records')
         .select(`
@@ -111,45 +107,19 @@ export function DataView({ workspace, recordType }: DataViewProps) {
           )
         `)
         .eq('workspace_id', workspace.id)
-        .eq('record_type_id', recordType.id)
+        .eq('record_type_id', recordType.id);
 
       if (error) {
-        console.error('Error fetching records:', error)
-        return
+        console.error('Error fetching records:', error);
+        return;
       }
 
-      console.log('Raw records structure:', JSON.stringify(records, null, 2))
-
-      // Transform the data into the format we need
-      const transformedRecords = (records || []).map(record => {
-        const contactRecord = record.contact_records
-        console.log('Contact record for', record.id, ':', contactRecord)
-        
-        return {
-          id: record.id,
-          created_at: record.created_at,
-          updated_at: record.updated_at,
-          first_name: contactRecord?.first_name || '',
-          middle_name: contactRecord?.middle_name || '',
-          last_name: contactRecord?.last_name || '',
-          race: contactRecord?.race || '',
-          gender: contactRecord?.gender || '',
-          pronouns: contactRecord?.pronouns || '',
-          emails: record.record_emails || [],
-          phones: record.record_phones || [],
-          addresses: record.record_addresses || [],
-          social_media: record.record_social_media || []
-        }
-      })
-
-      console.log('Setting records:', transformedRecords)
-      setRecords(transformedRecords)
+      const transformedRecords = transformRecords(records || []);
+      setRecords(transformedRecords);
     }
 
-    if (workspace.id && recordType.id) {
-      fetchRecords()
-    }
-  }, [workspace.id, recordType.id, recordType.slug])
+    fetchRecords();
+  }, [workspace.id, recordType.id]);
 
   // Fetch field definitions
   useEffect(() => {
@@ -165,32 +135,34 @@ export function DataView({ workspace, recordType }: DataViewProps) {
       }
 
       setFields(fieldDefs || [])
+      updateColumns(fieldDefs || [], selectedView?.settings?.visible_fields)
     }
 
     fetchFields()
-  }, [recordType.id])
+  }, [recordType.id, selectedView])
 
   // Fetch views
   useEffect(() => {
     async function fetchViews() {
-      const { data: views, error } = await supabase
+      const { data: viewsData, error } = await supabase
         .from('views')
         .select('*')
         .eq('workspace_id', workspace.id)
         .eq('type', recordType.slug)
-        .order('created_at', { ascending: true })
       
       if (error) {
         console.error('Error fetching views:', error)
         return
       }
 
-      setViews(views || [])
-      setSelectedView(views && views.length > 0 ? views[0] : null)
+      setViews(viewsData || [])
+      if (viewsData?.length > 0 && !selectedView) {
+        setSelectedView(viewsData[0])
+      }
     }
 
     fetchViews()
-  }, [workspace.id, recordType.slug])
+  }, [workspace.id, recordType.slug, selectedView])
 
   // Set default view
   useEffect(() => {
@@ -207,8 +179,80 @@ export function DataView({ workspace, recordType }: DataViewProps) {
     }
   }, [fields, selectedView]);
 
+  // Update columns when fields or view settings change
+  const updateColumns = (fields: any[], visibleFields?: string[]) => {
+    const newColumns = fields
+      .filter(field => !visibleFields || visibleFields.includes(field.key))
+      .map(field => ({
+        field: field.key,
+        header: field.name,
+        sortable: true,
+        render: (rowData: any) => {
+          // Add null check for rowData
+          if (!rowData) return '';
+
+          // Handle contact record fields
+          if (['first_name', 'middle_name', 'last_name', 'race', 'gender', 'pronouns'].includes(field.key)) {
+            // Safely access contact_records with optional chaining
+            return rowData?.contact_records?.[field.key] || '';
+          }
+
+          // Handle phone numbers
+          if (field.key === 'phone_numbers') {
+            return (rowData.record_phones || [])
+              .filter((p: any) => p?.is_primary)
+              .map((p: any) => p?.phone)
+              .join(', ') || '';
+          }
+
+          // Handle emails
+          if (field.key === 'emails') {
+            return (rowData.record_emails || [])
+              .filter((e: any) => e?.is_primary)
+              .map((e: any) => e?.email)
+              .join(', ') || '';
+          }
+
+          // Handle addresses
+          if (field.key === 'addresses') {
+            const primaryAddress = (rowData.record_addresses || []).find((a: any) => a?.is_primary);
+            if (primaryAddress) {
+              return `${primaryAddress.street_1}${primaryAddress.street_2 ? `, ${primaryAddress.street_2}` : ''}, ${primaryAddress.city}, ${primaryAddress.state} ${primaryAddress.postal_code}`;
+            }
+            return '';
+          }
+
+          // Handle social media
+          if (field.key === 'social_media') {
+            return (rowData.record_social_media || [])
+              .map((s: any) => `${s?.platform}: ${s?.username}`)
+              .join(', ') || '';
+          }
+
+          // Default fallback
+          return rowData[field.key] || '';
+        }
+      }));
+
+    setColumns(newColumns);
+  };
+
+  // Transform raw record data into the format we need
+  const transformRecords = (rawRecords: any[]) => {
+    return rawRecords.map(record => ({
+      ...record,
+      contact_records: record.contact_records || {},
+      record_emails: record.record_emails || [],
+      record_phones: record.record_phones || [],
+      record_addresses: record.record_addresses || [],
+      record_social_media: record.record_social_media || []
+    }));
+  };
+
+  // Handle view changes
   const handleViewChange = (view: View) => {
     setSelectedView(view)
+    updateColumns(fields, view.settings?.visible_fields)
   }
 
   const handleViewCreated = (newView: View) => {
@@ -216,6 +260,7 @@ export function DataView({ workspace, recordType }: DataViewProps) {
     setSelectedView(newView)
   }
 
+  // Handle view settings changes
   const handleViewSettingsChange = async (settings: ViewSettings) => {
     if (!selectedView) return
 
@@ -230,6 +275,7 @@ export function DataView({ workspace, recordType }: DataViewProps) {
     }
 
     setSelectedView({ ...selectedView, settings })
+    updateColumns(fields, settings.visible_fields)
     setViews(currentViews => 
       currentViews.map(view => 
         view.id === selectedView.id 
@@ -239,71 +285,32 @@ export function DataView({ workspace, recordType }: DataViewProps) {
     )
   }
 
-  // Create columns from visible fields with null checks
-  const columns = selectedView?.settings?.visible_fields?.map(fieldKey => {
-    const field = fields.find(f => f.key === fieldKey)
-    if (!field) return null
-
-    return {
-      field: fieldKey,
-      header: field.name,
-      sortable: true,
-      render: (value: any) => {
-        if (!value) return ''
-        
-        if (field.is_multiple) {
-          switch (fieldKey) {
-            case 'emails':
-              return value?.map((e: any) => e.email).join(', ')
-            case 'phones':
-              return value?.map((p: any) => p.phone).join(', ')
-            case 'addresses':
-              return value?.map((a: any) => 
-                `${a.street_1}${a.street_2 ? `, ${a.street_2}` : ''}, ${a.city}, ${a.state} ${a.postal_code}`
-              ).join('; ')
-            case 'social_media':
-              return value?.map((s: any) => `${s.platform}: ${s.username}`).join(', ')
-            default:
-              return Array.isArray(value) ? value.join(', ') : value
-          }
-        }
-        return value
-      }
-    }
-  }).filter(Boolean) || []
-
   console.log('Columns:', columns)
   console.log('Records:', records)
 
   return (
     <div className="flex flex-col h-full">
       <DataHeader
+        title={recordType.name}
+        recordType={recordType.slug}
+        workspaceId={workspace.id}
+        fields={fields}
         views={views}
         selectedView={selectedView}
-        onViewChange={setSelectedView}
+        onViewChange={handleViewChange}
         onViewCreated={(view) => {
           setViews(prev => [...prev, view])
           setSelectedView(view)
         }}
-        onViewSettingsChange={(settings) => {
-          if (selectedView) {
-            const updatedView = { ...selectedView, settings }
-            setSelectedView(updatedView)
-            setViews(prev => prev.map(v => v.id === selectedView.id ? updatedView : v))
-          }
-        }}
+        onViewSettingsChange={handleViewSettingsChange}
       />
-      {columns.length > 0 ? (
-        <DataSheet 
-          columns={columns} 
+      <div className="flex-1 overflow-auto">
+        <DataSheet
+          columns={columns}
           data={records}
-          onRowClick={() => {}}
+          filteredData={records}
         />
-      ) : (
-        <div className="p-4 text-center text-gray-500">
-          No columns configured for this view
-        </div>
-      )}
+      </div>
     </div>
   )
 }
