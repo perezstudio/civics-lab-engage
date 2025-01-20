@@ -56,6 +56,28 @@ export function CreateRecordSheet({
   const [isLoading, setIsLoading] = useState(false)
   const supabase = createClientComponentClient()
 
+  console.log('Record Type received:', recordType)
+
+  const RECORD_TYPE_MAP = {
+    'contacts': '00000000-0000-0000-0000-000000000001',
+    'donations': '00000000-0000-0000-0000-000000000002',
+    'events': '00000000-0000-0000-0000-000000000003'
+  } as const;
+
+  const TABLE_NAME_MAP = {
+    'contacts': 'contact',
+    'donations': 'donation',
+    'events': 'event',
+    'businesses': 'business'
+  } as const;
+
+  const JUNCTION_TABLE_MAP = {
+    'emails': 'record_emails',
+    'phone_numbers': 'record_phones',
+    'addresses': 'record_addresses',
+    'social_media': 'record_social_media'
+  } as const;
+
   const fetchLinkedRecords = async (recordType: string) => {
     const { data, error } = await supabase
       .from('records')
@@ -79,18 +101,37 @@ export function CreateRecordSheet({
     setIsLoading(true)
 
     try {
+      console.log('Record Type received:', recordType)
+
+      // Get the correct UUID for the record type
+      const recordTypeId = RECORD_TYPE_MAP[recordType.id as keyof typeof RECORD_TYPE_MAP]
+      
+      if (!recordTypeId) {
+        throw new Error(`Invalid record type: ${recordType.id}`)
+      }
+
+      // Create base record
       const { data: record, error: recordError } = await supabase
         .from('records')
-        .insert({
+        .insert([{
           workspace_id: workspaceId,
-          record_type_id: recordType.id
-        })
-        .select()
+          record_type_id: recordTypeId
+        }])
+        .select('*')
         .single()
 
-      if (recordError) throw recordError
+      if (recordError) {
+        console.error('Error creating base record:', recordError)
+        throw recordError
+      }
 
-      const specificTableName = `${recordType.slug}_records`
+      if (!record) {
+        throw new Error('No record created')
+      }
+
+      console.log('Created base record:', record)
+
+      // Map the form data to the correct structure
       const regularData: Record<string, any> = {}
       const multipleFieldsData: Record<string, any[]> = {}
 
@@ -103,37 +144,96 @@ export function CreateRecordSheet({
         }
       })
 
+      console.log('Regular data to insert:', regularData)
+
+      // Insert into the specific record type table
       const { error: specificError } = await supabase
-        .from(specificTableName)
-        .insert({
+        .from(`${TABLE_NAME_MAP[recordType.id as keyof typeof TABLE_NAME_MAP]}_records`)
+        .insert([{
           record_id: record.id,
           ...regularData
-        })
+        }])
 
-      if (specificError) throw specificError
+      if (specificError) {
+        console.error('Error creating specific record:', specificError)
+        await supabase.from('records').delete().eq('id', record.id)
+        throw specificError
+      }
 
+      // Handle multiple fields
       for (const [key, values] of Object.entries(multipleFieldsData)) {
         const field = fields.find(f => f.key === key)
         if (!field) continue
 
-        const junctionTableName = `${recordType.slug}_${key}`
-        const multipleRecords = values.map(value => ({
-          record_id: record.id,
-          ...value
-        }))
+        console.log(`Inserting ${key} data:`, values)
+
+        const junctionTableName = JUNCTION_TABLE_MAP[key as keyof typeof JUNCTION_TABLE_MAP]
+        if (!junctionTableName) {
+          console.error(`No junction table mapping found for ${key}`)
+          continue
+        }
+
+        console.log(`Using junction table: ${junctionTableName}`)
+
+        // Map the values according to the table schema
+        const multipleRecords = values.map(value => {
+          switch (key) {
+            case 'emails':
+              return {
+                record_id: record.id,
+                email: value.value,
+                type: value.type,
+                status: 'active',
+                is_primary: value.status === 'primary'
+              }
+            case 'phone_numbers':
+              return {
+                record_id: record.id,
+                phone: value.value,
+                type: value.type,
+                status: 'active',
+                is_primary: value.status === 'primary'
+              }
+            case 'social_media':
+              return {
+                record_id: record.id,
+                platform: value.type,
+                username: value.value,
+                url: null
+              }
+            default:
+              return null
+          }
+        }).filter(Boolean)
+
+        console.log(`Inserting records into ${junctionTableName}:`, multipleRecords)
 
         const { error: multipleError } = await supabase
           .from(junctionTableName)
           .insert(multipleRecords)
 
-        if (multipleError) throw multipleError
+        if (multipleError) {
+          console.error(`Error creating ${key} records:`, multipleError)
+          console.error('Full error details:', {
+            table: junctionTableName,
+            error: multipleError,
+            data: multipleRecords
+          })
+          await supabase.from('records').delete().eq('id', record.id)
+          throw multipleError
+        }
       }
 
+      console.log('Record created successfully')
       onOpenChange(false)
       setFormData({})
       onRecordCreated?.()
     } catch (error) {
       console.error('Error creating record:', error)
+      if (error instanceof Error) {
+        console.error('Error details:', error.message)
+      }
+      console.error('Full error object:', error)
     } finally {
       setIsLoading(false)
     }
