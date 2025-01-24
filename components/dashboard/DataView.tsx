@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { DataHeader } from './DataHeader'
-import { DataSheet } from './DataSheet'
+import {useEffect, useState} from 'react'
+import {createClientComponentClient} from '@supabase/auth-helpers-nextjs'
+import {DataHeader} from './DataHeader'
+import {DataSheet} from './DataSheet'
+import {SelectedViewProvider} from '../../contexts/SelectedViewContext'
 
 interface ViewSettings {
   visible_fields: string[]
@@ -239,7 +240,42 @@ export function DataView({ workspace, recordType }: DataViewProps) {
   // Handle view changes
   const handleViewChange = (view: View) => {
     setSelectedView(view)
-    updateColumns(fields, view.settings?.visible_fields)
+      // Apply the view's filters
+      if (view.settings?.filters) {
+          handleFiltersChange(view.settings.filters)
+      } else {
+          handleFiltersChange([]) // Clear filters if none exist
+      }
+  }
+
+    // Handle filter changes
+    const handleFiltersChange = async (filters: Filter[]) => {
+        if (!selectedView) return
+
+        // Update the view settings
+        const {error} = await supabase
+            .from('views')
+            .update({
+                settings: {
+                    ...selectedView.settings,
+                    filters
+                }
+            })
+            .eq('id', selectedView.id)
+
+        if (error) {
+            console.error('Error updating view filters:', error)
+            return
+        }
+
+        // Update local state
+        setSelectedView(prev => prev ? {
+            ...prev,
+            settings: {
+                ...prev.settings,
+                filters
+            }
+        } : null)
   }
 
   const handleViewCreated = (newView: View) => {
@@ -276,28 +312,31 @@ export function DataView({ workspace, recordType }: DataViewProps) {
   console.log('Records:', records)
 
   return (
-    <div className="flex flex-col h-full">
-      <DataHeader
-        title={recordType.name}
-        recordType={recordType.slug}
-        workspaceId={workspace.id}
-        fields={fields}
-        views={views}
-        selectedView={selectedView}
-        onViewChange={handleViewChange}
-        onViewCreated={(view) => {
-          setViews(prev => [...prev, view])
-          setSelectedView(view)
-        }}
-        onViewSettingsChange={handleViewSettingsChange}
-      />
-      <div className="flex-1 overflow-auto">
-        <DataSheet
-          columns={columns}
-          data={records}
-          filteredData={records}
-        />
-      </div>
-    </div>
+      <SelectedViewProvider initialView={selectedView}>
+          <div className="flex flex-col h-full">
+              <DataHeader
+                  title={recordType.name}
+                  recordType={recordType.slug}
+                  workspaceId={workspace.id}
+                  fields={fields}
+                  views={views}
+                  selectedView={selectedView}
+                  onViewChange={handleViewChange}
+                  onViewCreated={(view) => {
+                      setViews(prev => [...prev, view])
+                      setSelectedView(view)
+                  }}
+                  onViewSettingsChange={handleViewSettingsChange}
+              />
+              <div className="flex-1 overflow-auto">
+                  <DataSheet
+                      columns={columns}
+                      data={records}
+                      selectedView={selectedView}
+                      onFiltersChange={handleFiltersChange}
+                  />
+              </div>
+          </div>
+      </SelectedViewProvider>
   )
 }

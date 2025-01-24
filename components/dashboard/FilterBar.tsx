@@ -1,21 +1,13 @@
 'use client'
 
-import { useState, useCallback } from 'react'
-import { Button } from '@/components/ui/button'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Input } from '@/components/ui/input'
-import { FilterIcon, PlusIcon, XIcon } from 'lucide-react'
+import {useCallback, useEffect, useState} from 'react'
+import {Button} from '@/components/ui/button'
+import {Popover, PopoverContent, PopoverTrigger,} from '@/components/ui/popover'
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from '@/components/ui/select'
+import {Input} from '@/components/ui/input'
+import {FilterIcon, PlusIcon, XIcon} from 'lucide-react'
+import {useSelectedView} from '@/contexts/SelectedViewContext'
+import {createClientComponentClient} from '@supabase/auth-helpers-nextjs'
 
 type Operator = 'equals' | 'contains' | 'startsWith' | 'endsWith' | 'isEmpty' | 'isNotEmpty'
 
@@ -38,34 +30,100 @@ interface FilterBarProps {
 }
 
 export function FilterBar({ columns, onFiltersChange }: FilterBarProps) {
-  const [filters, setFilters] = useState<Filter[]>([])
+    const [isInitialized, setIsInitialized] = useState(false)
 
-  const addFilter = () => {
-    const newFilter: Filter = {
+    const selectedView = useSelectedView()
+    const supabase = createClientComponentClient()
+
+    useEffect(() => {
+        if (!selectedView || isInitialized) return
+
+        if (selectedView.settings?.filters) {
+            onFiltersChange(selectedView.settings.filters)
+        }
+        setIsInitialized(true)
+    }, [selectedView, isInitialized, onFiltersChange])
+
+    const addFilter = async () => {
+        if (!selectedView) return
+
+        const newFilter = {
       id: Math.random().toString(36).substr(2, 9),
       field: columns[0]?.field || '',
-      operator: 'contains',
+            operator: 'contains' as Operator,
       value: ''
     }
-    setFilters([...filters, newFilter])
-  }
 
-  const removeFilter = (id: string) => {
-    const newFilters = filters.filter(f => f.id !== id)
-    setFilters(newFilters)
+        const newFilters = [...(selectedView.settings?.filters || []), newFilter]
+
+        const {error} = await supabase
+            .from('views')
+            .update({
+                settings: {
+                    ...selectedView.settings,
+                    filters: newFilters
+                }
+            })
+            .eq('id', selectedView.id)
+
+        if (error) {
+            console.error('Error updating view filters:', error)
+            return
+        }
+
     onFiltersChange(newFilters)
   }
 
-  const updateFilter = useCallback((id: string, updates: Partial<Filter>) => {
-    const newFilters = filters.map(filter => {
+    const removeFilter = async (id: string) => {
+        if (!selectedView) return
+
+        const newFilters = (selectedView.settings?.filters || []).filter(f => f.id !== id)
+
+        const {error} = await supabase
+            .from('views')
+            .update({
+                settings: {
+                    ...selectedView.settings,
+                    filters: newFilters
+                }
+            })
+            .eq('id', selectedView.id)
+
+        if (error) {
+            console.error('Error updating view filters:', error)
+            return
+        }
+
+        onFiltersChange(newFilters)
+    }
+
+    const updateFilter = useCallback(async (id: string, updates: Partial<Filter>) => {
+        if (!selectedView) return
+
+        const newFilters = (selectedView.settings?.filters || []).map(filter => {
       if (filter.id === id) {
         return { ...filter, ...updates }
       }
       return filter
     })
-    setFilters(newFilters)
+
+        const {error} = await supabase
+            .from('views')
+            .update({
+                settings: {
+                    ...selectedView.settings,
+                    filters: newFilters
+                }
+            })
+            .eq('id', selectedView.id)
+
+        if (error) {
+            console.error('Error updating view filters:', error)
+            return
+        }
+
     onFiltersChange(newFilters)
-  }, [filters, onFiltersChange])
+    }, [selectedView, onFiltersChange])
 
   const getOperators = (): { value: Operator; label: string }[] => [
     { value: 'contains', label: 'Contains' },
@@ -83,9 +141,9 @@ export function FilterBar({ columns, onFiltersChange }: FilterBarProps) {
           <Button variant="outline" className="gap-2">
             <FilterIcon className="h-4 w-4" />
             Filters
-            {filters.length > 0 && (
+              {selectedView?.settings?.filters.length > 0 && (
               <span className="ml-1 rounded-full bg-primary w-5 h-5 text-xs flex items-center justify-center text-primary-foreground">
-                {filters.length}
+                {selectedView.settings.filters.length}
               </span>
             )}
           </Button>
@@ -105,7 +163,7 @@ export function FilterBar({ columns, onFiltersChange }: FilterBarProps) {
               </Button>
             </div>
             <div className="space-y-4">
-              {filters.map((filter) => (
+                {selectedView?.settings?.filters.map((filter) => (
                 <div key={filter.id} className="flex gap-2 items-start">
                   <Select
                     value={filter.field}

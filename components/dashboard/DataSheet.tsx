@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
-import { DataGrid } from './DataGrid'
-import { FilterBar } from './FilterBar'
+import {useCallback, useEffect, useState} from 'react'
+import {DataGrid} from './DataGrid'
+import {FilterBar} from './FilterBar'
 
 interface Column {
   field: string
@@ -14,14 +14,31 @@ interface Column {
 interface DataSheetProps {
   columns: Column[]
   data: any[]
+    selectedView: any
+    onFiltersChange: (filters: any[]) => void
   onRowClick?: (row: any) => void
   onEdit?: (row: any) => void
   onDelete?: (row: any) => void
 }
 
+interface ViewSettings {
+    visible_fields: string[]
+    filters: Filter[]
+    // ... other settings
+}
+
+interface View {
+    id: string
+    name: string
+    type: string
+    settings: ViewSettings
+}
+
 export function DataSheet({
   columns,
   data,
+                              selectedView,
+                              onFiltersChange,
   onRowClick,
   onEdit,
   onDelete,
@@ -102,8 +119,9 @@ export function DataSheet({
   return (
     <div className="flex flex-col gap-4">
       <FilterBar 
-        columns={columns} 
-        onFiltersChange={handleFiltersChange} 
+        columns={columns}
+        onFiltersChange={handleFiltersChange}
+        selectedView={selectedView}
       />
       <div className="flex-1 overflow-auto">
         <DataGrid
