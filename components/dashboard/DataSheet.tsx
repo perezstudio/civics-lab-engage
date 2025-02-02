@@ -11,49 +11,44 @@ interface Column {
   render?: (value: any) => React.ReactNode
 }
 
+type Operator = 'equals' | 'contains' | 'startsWith' | 'endsWith' | 'isEmpty' | 'isNotEmpty'
+
+interface Filter {
+  id: string
+  field: string
+  operator: Operator
+  value: string
+}
+
 interface DataSheetProps {
   columns: Column[]
   data: any[]
-    selectedView: any
-    onFiltersChange: (filters: any[]) => void
   onRowClick?: (row: any) => void
   onEdit?: (row: any) => void
   onDelete?: (row: any) => void
 }
 
-interface ViewSettings {
-    visible_fields: string[]
-    filters: Filter[]
-    // ... other settings
-}
-
-interface View {
-    id: string
-    name: string
-    type: string
-    settings: ViewSettings
-}
-
 export function DataSheet({
-  columns,
-  data,
-                              selectedView,
-                              onFiltersChange,
-  onRowClick,
-  onEdit,
-  onDelete,
-}: DataSheetProps) {
+                            columns,
+                            data,
+                            onRowClick,
+                            onEdit,
+                            onDelete,
+                          }: DataSheetProps) {
   const [filteredData, setFilteredData] = useState(data)
+  const [filters, setFilters] = useState<Filter[]>([])  // Add this line
 
-  const handleFiltersChange = useCallback((filters: any[]) => {
+  const handleFiltersChange = useCallback((newFilters: Filter[]) => {
+    setFilters(newFilters)  // Add this line
+
     // If there are no filters, show all data
-    if (!filters || filters.length === 0) {
+    if (!newFilters || newFilters.length === 0) {
       setFilteredData(data)
       return
     }
 
     const filtered = data.filter(row => {
-      return filters.every(filter => {
+      return newFilters.every(filter => {
         // Skip empty filters
         if (!filter.field || (!filter.value && !['isEmpty', 'isNotEmpty'].includes(filter.operator))) {
           return true
@@ -65,15 +60,15 @@ export function DataSheet({
           }
           if (field === 'phone_numbers') {
             return (obj.record_phones || [])
-              .filter((p: any) => p.is_primary)
-              .map((p: any) => p.phone)
-              .join(', ')
+                .filter((p: any) => p.is_primary)
+                .map((p: any) => p.phone)
+                .join(', ')
           }
           if (field === 'emails') {
             return (obj.record_emails || [])
-              .filter((e: any) => e.is_primary)
-              .map((e: any) => e.email)
-              .join(', ')
+                .filter((e: any) => e.is_primary)
+                .map((e: any) => e.email)
+                .join(', ')
           }
           return obj[field]
         }
@@ -117,21 +112,21 @@ export function DataSheet({
   }, [data])
 
   return (
-    <div className="flex flex-col gap-4">
-      <FilterBar 
-        columns={columns}
-        onFiltersChange={handleFiltersChange}
-        selectedView={selectedView}
-      />
-      <div className="flex-1 overflow-auto">
-        <DataGrid
-          columns={columns}
-          data={filteredData}
-          onRowClick={onRowClick}
-          onEdit={onEdit}
-          onDelete={onDelete}
+      <div className="flex flex-col gap-4">
+        <FilterBar
+            columns={columns}
+            filters={filters}  // Pass filters state here
+            onFiltersChange={handleFiltersChange}
         />
+        <div className="flex-1 overflow-auto">
+          <DataGrid
+              columns={columns}
+              data={filteredData}
+              onRowClick={onRowClick}
+              onEdit={onEdit}
+              onDelete={onDelete}
+          />
+        </div>
       </div>
-    </div>
   )
-} 
+}
